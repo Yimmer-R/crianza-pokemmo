@@ -1,0 +1,343 @@
+# Crianza PokeMMO
+
+Le dices el Pokémon que quieres —IVs, naturaleza, EVs, movimientos y habilidad—
+y te dice cómo llegar hasta él desde los Pokémon que ya tienes: qué cruces hacer,
+en qué orden, con qué objetos, qué te falta capturar y dónde, y cuánto cuesta.
+
+Es una web estática: sin dependencias, sin paso de compilación y sin backend.
+Todo el conocimiento del juego sale de la
+[wiki de PokeMMO](https://github.com/Yimmer-R/Wiki-PokeMMO), de donde se extrae a
+`datos/*.json` con un script.
+
+## Abrirla
+
+Publicada en GitHub Pages, desde el móvil o el ordenador:
+
+```
+https://yimmer-r.github.io/Crianza_PokeMMO/
+```
+
+El flujo de publicación pasa las pruebas y publica en cada push a `main`, pero
+**Pages hay que activarlo a mano una vez** (`Settings → Pages → Source = GitHub
+Actions`): el token del flujo puede desplegar, no crear el sitio. Y el
+repositorio tiene que ser **público**, porque con plan gratuito Pages no sirve
+repos privados. Los detalles, y cómo hacerlo desde el móvil, están en
+[docs/despliegue.md](docs/despliegue.md).
+
+En local:
+
+```
+node herramientas/servir.mjs
+```
+
+y abre <http://localhost:8000>.
+
+> **Con doble clic en `index.html` no funciona.** El navegador bloquea la lectura
+> de los JSON de `datos/` cuando la página viene de `file://` (política de mismo
+> origen). Cualquier servidor estático sirve: `python3 -m http.server` también.
+
+## Qué resuelve
+
+**El árbol de crianza.** Un cruce garantiza los IVs a 31 que **comparten** los dos
+padres —el promedio de 31 y 31 es 31— más los que fuerce un objeto Recio, uno por
+padre. De ahí sale todo: un n×31 necesita dos padres de n-1 que compartan n-2, y
+eso baja hasta padres de 1×31, que son los que se capturan. Un 5×31 son 16 padres,
+y en PokeMMO **los padres se consumen**.
+
+**La naturaleza, siempre con Piedraeterna.** Es la única forma de heredarla: que
+los dos padres la compartan **no** la transmite, la cría la sortea igual entre
+las 25. La Piedraeterna ocupa un hueco de objeto, así que el cruce que la lleva
+sólo fuerza un IV en vez de dos, y la hoja de sólo naturaleza entra por abajo del
+árbol. El lado bueno: media cadena queda sin naturaleza, y ahí encaja cualquier
+Pokémon que ya tengas aunque la suya no sea la buena.
+
+**Las seis características, con barra.** En Objetivo, debajo de la especie: la base
+del Pokémon y, en el mismo trazo, lo que suman los IVs y los EVs, más el número
+final al nivel al que juegas y con la naturaleza aplicada. Los dos tramos están
+en la misma unidad porque eso sale de la fórmula: un IV y unos EVs valen
+`(IV + ⌊EV/4⌋)/2` puntos de característica base, y no depende del nivel. Va con
+su aviso: la fórmula de característica es la estándar de 5ª generación y la wiki
+todavía no ha comprobado si PokeMMO la usa tal cual.
+
+**La importación se corrige fila a fila.** Si el OCR lee mal un IV o se te va un
+dedo, cada Pokémon de la tanda tiene su botón «Editar» en la tabla de revisión:
+se arregla en el sitio, resolviendo los nombres como al importar, y sin tocar a
+los demás de la tanda.
+
+**Los IVs que no pediste.** Si en tu caja hay un 31 (o un 30) en una
+característica que el objetivo no pide —el Gible que está en el árbol sólo por
+poner la especie y que además trae 31 en Defensa—, el plan lo dice en vez de
+tirarlo en silencio: si sale gratis, si se juega a una tirada y con qué
+probabilidad, o si se pierde. Y hay un botón para conservarlo, con el precio
+delante: lo que va a costar en cruces, capturas y dinero. Conservarlo de verdad
+es pedirlo, porque un cruce sólo garantiza lo que comparten los dos padres.
+
+**Con la cara de cada Pokémon.** Objetivo, plan, árbol, capturas, inventario y la
+línea evolutiva salen con su sprite: el render 3D de Pokémon HOME, y la variante ♀
+en las 97 especies que el juego dibuja distintas. Las imágenes no viven aquí —son
+unos 150 MB—: se enlazan al volcado que enlaza la wiki, y si una no carga se queda
+su hueco marcado en vez de la de otro Pokémon.
+
+**Tu inventario.** Cada vez que anotas un Pokémon, el plan se recalcula entero y
+se recorta por donde puede. El emparejado busca el hueco que **más capturas
+ahorra**, no el primero que encaja: un 3×31 metido en un hueco de 3×31 borra siete
+capturas del árbol, y metido en una hoja de 1×31 no ahorra ninguna.
+
+Y no se tira nada que valga: una **hembra de la especie objetivo** sirve aunque no
+tenga ni un 31, porque la especie la pone la madre y nada más. El plan alarga la
+cadena por abajo con un cruce en el que ella sólo pone la especie y el padre trae
+el IV con su objeto — se cambia la captura cara del árbol (esa especie, hembra, y
+además con el 31) por una fácil.
+
+**Los pasos son un checklist.** Un cruce se puede marcar cuando sus dos padres
+están en el inventario; al marcarlo **se gastan** —en PokeMMO los padres se
+consumen— y la cría entra en el inventario con los 31 que el cruce garantiza. El
+plan se recalcula y el paso desaparece solo. No hay casillas guardadas aparte: el
+estado del plan **es** el inventario, y así no pueden discrepar. Hay un nivel de
+deshacer, porque marcar un paso por error borra dos Pokémon.
+
+**Varias crianzas a la vez.** La barra de arriba cambia entre ellas y se lleva el
+Objetivo, el Plan y el Entrenamiento. El inventario es **uno solo**, a propósito:
+los Pokémon son los mismos, están en tu PC. Si dos planes cuentan con el mismo
+ejemplar se avisa; el reparto de verdad lo hace completar un paso.
+
+**Cuando la captura no sale como decía el plan.** Pedías un macho con 31 en
+Velocidad y te ha salido hembra con 31 en Ataque. Lo anotas y la app te dice si
+encaja en otro hueco, en cuál conviene más, o si no sirve para esta cadena y hay
+que volver a capturar — con el motivo, no sólo el «no».
+
+**Tres formas de anotar un Pokémon, en las dos pestañas.** A mano, pegando la
+ficha como texto, o **subiendo una captura de la ficha del juego**, que se lee con
+OCR. Están tanto en **Inventario** (para registrar lo que tienes) como en
+**Objetivo** (para decir «quiero criar este», sin rellenar siete bloques a mano).
+Las tres vías acaban en el mismo parser, así que no pueden interpretar un valor de
+forma distinta, y ninguna de las automáticas guarda nada sin pasar por una
+pantalla de revisión: un IV mal leído rompe el plan sin que se note. El formato de
+texto y CSV está en
+[docs/formato-de-importacion.md](docs/formato-de-importacion.md).
+
+Al pasar una ficha a objetivo se toman **los IVs que ya están a 31**, porque un
+objetivo es «quiero estos IVs perfectos» y no los valores del ejemplar. Hay una
+casilla para marcar los seis cuando la ficha se usa como plantilla de un
+competitivo.
+
+**Nombres del juego traducidos, diciéndolo.** La ficha del juego dice
+«Desenrollar» y la wiki lo llama «Rodar». El resolutor prueba el nombre exacto,
+sin tildes, el inglés, la tabla de alias del cliente y por último una
+aproximación que corrige erratas de OCR — y siempre te dice qué ha interpretado.
+Lo que no reconoce no se inventa.
+
+**Los movimientos huevo atan al padre del cruce final.** Si el objetivo lleva un
+movimiento que sólo se saca de huevo, ese hueco deja de aceptar cualquier especie:
+tiene que ser un macho que lo sepa. Por eso el inventario guarda los cuatro
+movimientos de cada Pokémon.
+
+**La especie la pone la madre.** Un Chimchar hembra cruzado con un Rattata macho
+da Chimchar. Así que sólo la línea materna que cuelga del objetivo tiene la especie
+atada: todos los demás huecos aceptan **cualquier especie que comparta grupo
+huevo**, y la app propone la más fácil de capturar. Dentro de esas ramas ni el sexo
+está fijado, porque da igual quién haga de madre.
+
+**Filtro de regiones.** Marcas las que tienes desbloqueadas y no se te propone
+nada de las demás. Cuando algo sólo existe en una región que no tienes, lo dice en
+vez de callarlo.
+
+**Hora del juego y estación.** Muchas tablas de encuentro sólo existen a una hora
+o en una estación: una horda «de noche · invierno» no está si entras de día en
+verano. El selector está en **Capturas** y en **Entrenamiento**, que es donde se
+usa. Dices qué tienes y lo que sirve ahora sale primero; lo que no toca **no se
+esconde** —a diferencia de las regiones, esperar a la noche son minutos y a otra
+estación semanas— sino que se marca con cuándo sí: verde «ahora», amarillo
+«espera una franja», rojo «espera una estación». Sin elegir nada, la columna
+dice a qué horas sale cada sitio en corto: **M**, **D**, **N** y sus
+combinaciones.
+
+**En qué orden aprender los movimientos.** Un movimiento puede estar en la lista
+de una fase anterior, o en la de la forma final a un nivel que ya habrás pasado
+cuando por fin la tengas. Casi todo lo resuelve el **recordador de movimientos**,
+que en PokeMMO está en todos los centros Pokémon y cobra en Escamas Corazón:
+enseña los de cualquier nivel aunque no hayas llegado, y los de una evolución
+anterior aunque nunca los haya sabido. Lo que **no** arregla es un movimiento
+huevo, que tiene que venir en el huevo — y eso sí lo calcula el plan de crianza.
+Cuando de verdad hay que aprender algo antes de evolucionar, se dice y se
+explica por qué.
+
+**Sin género no es «sólo con Ditto».** En PokeMMO un Pokémon sin género cría con
+**su propia línea evolutiva** o con un Ditto, al contrario que en los juegos
+originales. Y no tiene sexos, así que ningún hueco pide ♀ ni ♂ y el selector de
+sexo desaparece del objetivo.
+
+**La especie la pone la línea entera.** Del huevo sale la forma base, así que
+un Staryu y un Starmie ponen el mismo huevo: para la madre de la cadena vale
+cualquiera de la línea y se propone **el más fácil de pillar donde juegas**, con
+los demás al lado. De ahí salen dos avisos que antes no estaban:
+
+- los **bebés** (Pichu, Tyrogue, Riolu…) están en el grupo «No cría»: se
+  capturan, pero hay que evolucionarlos antes de cruzarlos, y se dice con qué
+  condición;
+- hay **siete líneas sin ninguna hembra** (Nidoran♂, Tauros, Rufflet, Throh,
+  Sawk, Volbeat y la de Tyrogue). Ahí la especie sólo pasa con un **macho y un
+  Ditto**, y como un Ditto no se puede criar, ese Ditto hay que capturarlo o
+  comprarlo ya con los IVs. El plan lo dice en vez de quedarse en «captura
+  imposible», que es lo que hacía.
+
+**El plan no se queda en una sola forma de criar.** La Piedraeterna la puede
+llevar la madre o el padre, y eso cambia el árbol entero: el que NO la lleva es
+el que tiene que traer todos los IVs. Partiendo de cero conviene en el padre
+(así la cadena de naturaleza acepta cualquier especie); en cuanto tienes un
+macho cargado de 31, conviene en la madre, porque entonces ese macho entra tal
+cual en el cruce final. Así que el plan se monta de las tres formas y se queda
+con la que menos **esfuerzo de captura** pida contra tu inventario —dos capturas
+sin pedir IVs son más fáciles que una de 2×31, así que se comparan encuentros
+esperados y no número de capturas—. En un caso real eso pasó de 5 cruces y 1
+captura a 3 cruces y 0 capturas, y el plan dice de cuántas formas eligió.
+
+**Si lo único que falla es el sexo.** El sexo de un Pokémon no se cambia, pero
+el de una cría sí: se paga en la guardería. Así que un «1×31 en Velocidad ♀»
+que no puedes cubrir se convierte en un cruce entre el ♂ que sí tiene ese 31
+—con su objeto Recio, que lo fuerza— y una captura que no pide nada de nada.
+Cambia buscar 1 de cada 64 encuentros por 1 de cada 2, a cambio de un Recio y
+del pago del sexo, y lo explica en el paso. Y lo que el plan no usa del
+inventario sale en su propio plegable con el motivo: un 2×31 en la caja
+mientras el plan pide capturas parece un fallo aunque haya una razón.
+
+**El pseudo 31.** Un IV a 30 vale de padre cuando no hay un 31, y el plan lo
+usa — pero por detrás de los 31, nunca por delante, y diciéndolo. Dos 30 dan 30
+seguro; un 30 contra un 31 da 31 sólo a veces (25 % sin objetos, 12,5 % con dos),
+salvo que el Recio de ese IV lo lleve el padre que tiene el 31, y entonces sale
+31 seguro: eso lo coloca la app sola y lo explica en el paso. En la raíz no se
+acepta un 30, porque la raíz es el Pokémon que has pedido. Y si la cadena acaba
+entregando un 30, la optimización de EVs hace la cuenta con el 30: a nivel 50 la
+paridad del IV mueve los escalones, así que 252 deja de ser el corte y pasa a
+ser 248.
+
+**El aspecto.** La forma viene de una plantilla de diseño: esquinas rectas,
+cajas de una línea, rótulos en mayúsculas espaciadas, titulares con un
+subrayado corto y los pasos numerados con su pestañita. El color, de una paleta
+de fantasía oscura: fondo abisal, carmesí para lo que se puede pulsar, gris
+tonal para lo secundario, una insignia blanca para «esto ya está» y un rojo
+anaranjado, distinto del carmesí, para los avisos y los errores. Es oscura y no
+tiene versión clara.
+
+Que no se pierda ninguna letra no se deja al ojo: la prueba de navegador mide el
+contraste real de los ~760 elementos con texto de las cinco vistas y exige el
+mínimo de la WCAG. Dos colores de la paleta se aclararon precisamente por eso, y
+está anotado cuáles y por qué.
+
+**Cada objeto dice para qué es, y cuánto cuesta en PB.** «Franja Recia» a secas
+no dice nada en la tienda, así que el presupuesto pone «Franja Recia
+(Velocidad)», «Piedraeterna (Naturaleza)». Y al lado, la vía sin dinero: los
+seis Recios se venden a 750 BP en la Torre Batalla de Kanto. La Piedraeterna no
+tiene precio en PB, y elegir el sexo de la cría tampoco —es un servicio de la
+guardería, no un objeto—, así que sus líneas lo dicen en vez de quedarse en
+blanco.
+
+**Tienda o GTL.** El presupuesto usa el precio de tienda, que es firme, y al
+lado compara con el precio de mercado observado cuando lo hay. Con un caso
+aparte: **la Piedraeterna no se vende en ninguna tienda**, por mucho que el
+volcado la dé a 4.000 en las cinco guarderías. Se farmea a Pokémon salvajes o se
+compra en el GTL, así que ahí el presupuesto usa un precio de mercado con fecha
+—y avisando de que caduca— en vez de uno de tienda que no existe.
+
+**Entrenamiento.** Para los EVs que pidas: qué hordas los dan, en qué zona de qué
+región, cuántas rondas con el objeto duplicador, y qué baya usar si te has pasado.
+
+**EVs que no dan ningún punto.** Los EVs suben la característica por escalones y
+lo que queda entre uno y el siguiente está tirado. A nivel 100 un punto son 4 EVs;
+a nivel 50 son 8, pero el corte depende de la **paridad del IV** (impar: 4, 12,
+20…; par: 8, 16, 24…). La app dice cuánto estás tirando y dónde reinvertirlo para
+completar un punto entero. El clásico 252/252/6 con IVs a 31 tira 2 EVs; con IVs a
+30 tira 14, y uno de ellos sí vale un punto.
+
+## Estructura
+
+```
+index.html              la app
+src/nucleo/             la lógica, sin nada del DOM
+  constantes.js           topes, tablas y precios, cada uno con su fuente
+  herencia.js             la matemática de los IVs y la naturaleza al criar
+  compatibilidad.js       grupos huevo, sexos, de quién sale la especie
+  planificador.js         el árbol: requisitos, inventario y reparto de sexos
+  inventario.js           los Pokémon que tienes, y si te sirven
+  nombres.js              resolver nombres del juego, del inglés y de OCR
+  importar.js             parser de texto, CSV y JSON
+  capturas.js             dónde conseguir lo que falta, filtrado por región
+  cuando.js               hora del juego y estación: si está ahí cuando entras
+  aprendizaje.js          en qué orden se aprende cada movimiento, con evoluciones
+  coste.js                el presupuesto, separando lo confirmado de lo estimado
+  entrenamiento.js        el plan de EVs
+  movimientos.js          cómo llega cada movimiento, y cuál obliga a criar
+  habilidades.js          normal, oculta, y qué objeto hace falta
+  sprites.js              qué imagen le toca a cada Pokémon, y con qué sexo
+  regalos.js              los IVs que el inventario trae y nadie pidió
+  estadisticas.js         de las bases al número final, con IVs, EVs y naturaleza
+src/ui/                 vistas y estado; nada de reglas del juego
+  estado.js               las crianzas, el inventario y el repintado
+  barra-crianzas.js       cambiar de crianza sin salir de la pestaña
+  componentes.js          helpers de render, el autocompletado y los plegables
+  importador.js           la interfaz de importar, compartida por dos pestañas
+  ocr.js                  lee una captura con Tesseract.js (necesita canvas)
+src/datos/cargador.js   carga los JSON
+datos/*.json            generados desde la wiki — no se editan a mano
+iconos/                 generados con herramientas/generar-iconos.mjs
+herramientas/
+  extraer-wiki.mjs        regenera datos/ desde el repo de la wiki
+  comprobar-datos.mjs     valida datos/ sin necesitar la wiki
+  generar-iconos.mjs      los iconos de la app, en PNG y SVG
+  servir.mjs              servidor estático mínimo
+pruebas/                304 pruebas unitarias + una de navegador
+docs/                   el modelo, las fuentes, el formato y el despliegue
+```
+
+El `nucleo/` no toca el DOM y el `ui/` no contiene ninguna regla del juego. Por eso
+las pruebas corren en Node sin navegador.
+
+## Regenerar los datos
+
+```
+node herramientas/extraer-wiki.mjs [ruta-al-repo-de-la-wiki]
+```
+
+Busca `../wiki-pokemmo` por defecto, y `../PokeMMO` como respaldo. Saca 667 Pokémon con sus grupos huevo, ratios de
+género, learnsets completos y encuentros por región; las 25 naturalezas; los 177
+movimientos huevo cruzados al revés con sus grupos; las hordas de EVs por
+característica; los precios de los objetos de crianza y entrenamiento; y el
+sprite de cada uno.
+
+## Pruebas
+
+```
+node pruebas/ejecutar.mjs
+```
+
+Ver [pruebas/LEEME.md](pruebas/LEEME.md).
+
+## Documentación
+
+| documento | de qué va |
+|---|---|
+| [modelo-de-crianza.md](docs/modelo-de-crianza.md) | la deducción del árbol, la naturaleza, la espina materna, los movimientos huevo |
+| [formato-de-importacion.md](docs/formato-de-importacion.md) | el formato de texto y CSV, y qué tolera |
+| [exportar-el-pc.md](docs/exportar-el-pc.md) | por qué no se pueden sacar las cajas del juego de golpe |
+| [despliegue.md](docs/despliegue.md) | publicar en Pages, también desde el móvil |
+| [datos-y-fuentes.md](docs/datos-y-fuentes.md) | de dónde sale cada JSON y las trampas del formato |
+| [decisiones.md](docs/decisiones.md) | por qué está hecho así |
+
+## Lo que esta app no sabe
+
+No es una lista de pendientes: son huecos con motivo.
+
+- **Precios de mercado del GTL.** La wiki no los guarda a propósito, porque un
+  precio apuntado miente a los dos meses. Los padres de partida quedan fuera del
+  presupuesto y ese número lo pones tú.
+- **Los tramos intermedios del pago por sexo.** La wiki publica los extremos
+  (5.000 en especies 1:1, 25.000 por el sexo minoritario en 7:1). El tramo 3:1 va
+  marcado como estimado en la propia tabla del presupuesto.
+- **Cómo se hereda la habilidad al criar.** No está documentado, así que el plan
+  cuenta con la Píldora o el Parche y no con la suerte.
+- **Si las vitaminas tienen tope de EVs** en PokeMMO. El número sale de dividir.
+- **Si la fórmula de característica es la estándar de 5ª generación.** La wiki lo
+  deja escrito como pendiente. Las barras de «Estadísticas» y los escalones de
+  EVs se apoyan en ella, y las dos cosas lo dicen donde se enseñan.
+
+Mecánicas de 5ª generación: ni tipo Hada ni Megaevoluciones.
